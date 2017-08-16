@@ -20,7 +20,7 @@ setup(
     license='MIT',
 
     classifiers=[
-        'Development Status :: 3 - Beta',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'Intended Audience :: Telecommunications Industry',
         'Topic :: Communications :: Ham Radio',
