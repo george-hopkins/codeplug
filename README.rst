@@ -1,6 +1,10 @@
 codeplug
 ========
 
+.. image:: https://img.shields.io/pypi/v/codeplug.svg
+  :target: https://pypi.python.org/pypi/codeplug/
+  :alt: Latest Version
+
 Read and write Motorola Codeplugs (.ctb) from the commandline.
 
 
