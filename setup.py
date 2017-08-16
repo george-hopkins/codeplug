@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 from codecs import open
 from os import path
 
@@ -33,7 +33,7 @@ setup(
 
     keywords='motorola mototrbo cps ctb codeplug dmr',
 
-    packages=find_packages(exclude=['tests']),
+    py_modules=['codeplug'],
 
     install_requires=[
         'cryptography>=1.6',
