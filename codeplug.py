@@ -1,6 +1,7 @@
 import argparse
 import base64
 import binascii
+import configparser
 import os
 import sys
 import zlib
@@ -89,11 +90,32 @@ def build(payload, signing_key, key, iv, backend):
     return etree.tostring(doc)
 
 
+def _read_config(filename):
+    config = configparser.ConfigParser()
+    config['codeplug'] = {}
+
+    if filename:
+        config.read_file(open(filename, 'r'))
+    elif os.path.isfile('codeplug.cfg'):
+        config.read_file(open('codeplug.cfg', 'r'))
+
+    for key, value in os.environ.items():
+        if key.startswith('CODEPLUG_'):
+            config['codeplug'][key[9:].lower()] = value
+
+    if 'key' not in config['codeplug']:
+        raise Exception('Invalid configuration')
+
+    return config['codeplug']
+
+
 def _decode_cmd(args):
+    config = _read_config(args.config)
+
     with open(args.file, 'rb') as f:
         data = f.read()
 
-    result = decode(data, base64.b64decode(args.key), base64.b64decode(args.iv))
+    result = decode(data, base64.b64decode(config['key']), base64.b64decode(config['iv']))
 
     xml = etree.fromstring(result)
 
@@ -102,14 +124,15 @@ def _decode_cmd(args):
 
 
 def _build_cmd(args):
+    config = _read_config(args.config)
+
     backend = default_backend()
 
     payload = etree.tostring(etree.parse(args.file))
 
-    with open(args.signing_key, 'rb') as f:
-        signing_key = load_pem_private_key(f.read(), password=None, backend=backend)
+    signing_key = load_pem_private_key(config['signing_key'].encode('ascii'), password=None, backend=backend)
 
-    result = build(payload, signing_key, base64.b64decode(args.key), base64.b64decode(args.iv), backend)
+    result = build(payload, signing_key, base64.b64decode(config['key']), base64.b64decode(config['iv']), backend)
 
     with open(args.output or args.file + '.ctb', 'wb') as f:
         f.write(result)
@@ -117,8 +140,7 @@ def _build_cmd(args):
 
 def main():
     parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument('--key', default=os.getenv('CTB_KEY'))
-    parent_parser.add_argument('--iv', default=os.getenv('CTB_IV'))
+    parent_parser.add_argument('-c', dest='config')
     parent_parser.add_argument('-o', dest='output')
     parent_parser.add_argument('file')
 
@@ -130,7 +152,6 @@ def main():
     parser_decode.set_defaults(func=_decode_cmd)
 
     parser_build = subparsers.add_parser('build', parents=[parent_parser])
-    parser_build.add_argument('signing_key')
     parser_build.set_defaults(func=_build_cmd)
 
     args = parser.parse_args()

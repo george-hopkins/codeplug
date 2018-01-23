@@ -14,11 +14,10 @@ Getting Started
 ::
 
   pip install codeplug
-  export CTB_KEY='...'
-  export CTB_IV='...'
+  # set the keys in codeplug.cfg
   codeplug decode yourfile.ctb
   # modify yourfile.ctb.xml
-  codeplug build yourfile.ctb.xml yourprivkey.pem
+  codeplug build yourfile.ctb.xml
 
 **Note:** If you own a copy of MOTOTRBO CPS, you can use codeplug-prepare_ to extract the keys.
 
