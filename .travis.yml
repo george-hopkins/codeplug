@@ -1,0 +1,21 @@
+language: python
+
+python:
+  - 3.5
+  - 3.6
+
+install:
+  - pip install .
+
+script:
+  - |
+      cat <<EOF >codeplug.cfg
+      [codeplug]
+      key = $(head -c32 /dev/urandom | base64 -w0)
+      iv = $(head -c16 /dev/urandom | base64 -w0)
+      signing_key = $(openssl genrsa 1024 | sed 's/^/    /')
+      EOF
+  - echo '<LTD_CODEPLUG VERSION="10.05.06"/>' >test.xml
+  - python codeplug.py build test.xml
+  - python codeplug.py decode test.xml.ctb
+  - diff -u test.xml test.xml.ctb.xml

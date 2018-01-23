@@ -1,6 +1,9 @@
 codeplug
 ========
 
+.. image:: https://img.shields.io/travis/george-hopkins/codeplug/master.svg
+  :target: https://travis-ci.org/george-hopkins/codeplug
+  :alt: Build Status
 .. image:: https://img.shields.io/pypi/v/codeplug.svg
   :target: https://pypi.python.org/pypi/codeplug/
   :alt: Latest Version
