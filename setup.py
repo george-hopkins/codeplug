@@ -38,6 +38,7 @@ setup(
     install_requires=[
         'cryptography>=1.6',
         'lxml>=3',
+        'pyOpenSSL>=17',
     ],
     extras_require={
         'dev': [],
