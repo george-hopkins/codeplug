@@ -7,6 +7,9 @@ codeplug
 .. image:: https://img.shields.io/pypi/v/codeplug.svg
   :target: https://pypi.python.org/pypi/codeplug/
   :alt: Latest Version
+.. image:: https://img.shields.io/badge/download-master-blue.svg?logo=windows
+  :target: https://ci.appveyor.com/api/projects/george-hopkins/codeplug/artifacts/dist/codeplug.exe?branch=master
+  :alt: Download (Windows)
 
 Read and write Motorola Codeplugs (.ctb) from the commandline.
 
@@ -16,7 +19,7 @@ Getting Started
 
 ::
 
-  pip install codeplug
+  pip install codeplug # or download from above
   # set the keys in codeplug.cfg
   codeplug decode yourfile.ctb
   # modify yourfile.ctb.xml
