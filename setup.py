@@ -8,7 +8,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='codeplug',
-    version='0.1.0',
+    version='0.2.0',
 
     description='codeplug decoder and builder for Motorola radios',
     long_description=long_description,
