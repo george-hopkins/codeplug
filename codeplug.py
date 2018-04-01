@@ -52,6 +52,22 @@ _CP1252_BESTFIT = {
 _CP1252_BESTFIT_INVERSE = {c: u for u, c in _CP1252_BESTFIT.items()}
 
 
+_UUID_TO_ARCHIVE_TYPE = {
+    'AF5DAB63F4FC4926BB9000A6F18AF3DC': 'BAHAMA',
+    '0571AFE244664F999A96B020E82DC69C': 'GEMSTONE',
+    '0C78E1B906C54D3A8F264CE5C4F0B9DF': 'GEMSTONE',
+    'C52A3D4953FE469D8E11F05B143E8C56': 'GEMSTONE',
+    'EBCCE9BF33B14896B5C2E7E3AA19AF0F': 'GEMSTONE',
+    '9F6C2442C375421981A8987115FC9ADE': 'MALTA',
+    'D105ADD323864E539B513A65076458D3': 'MATRIX',
+    '0C0D6EE58204FBDEBB8860C631AB465A': 'PARADISE_LIGHT',
+    '1EC82E1A4AE2B4F1A8AC27E8039CB7E4': 'PARADISE_LIGHT',
+    'C4FC39D8DEF24B779D1CB719AF26A269': 'PARADISE_LIGHT',
+    '06CE7B7163C0456A845A6E13421F0AE4': 'PHOENIX',
+    '106F58B631044D63B41F0C0D7720758D': 'REUNION',
+}
+
+
 def _int_to_bytes(number):
     return number.to_bytes((number.bit_length() + 7) // 8, byteorder='big')
 
@@ -251,20 +267,25 @@ def _build_cmd(args):
 
     backend = default_backend()
 
-    payload = etree.tostring(etree.parse(args.file), encoding='utf-8')
+    doc = etree.parse(args.file)
+
+    uuid = doc.xpath('//CS_FWID')[0].text
+    archive_type = _UUID_TO_ARCHIVE_TYPE[uuid]
+
+    payload = etree.tostring(doc, encoding='utf-8')
 
     if 'signing_password' in config:
         signing_key = load_pkcs12(base64.b64decode(config['signing_key']), base64.b64decode(config['signing_password'])).get_privatekey().to_cryptography_key()
     else:
         signing_key = load_pem_private_key(config['signing_key'].encode('ascii'), password=None, backend=backend)
 
-    result = build(args.type, payload, signing_key, base64.b64decode(config['key']), base64.b64decode(config['iv']), backend)
+    result = build(archive_type, payload, signing_key, base64.b64decode(config['key']), base64.b64decode(config['iv']), backend)
 
     output_path = args.output or args.file + '.ctb'
     with open(output_path, 'wb') as f:
         f.write(result)
 
-    print('Built {} archive in {}'.format(args.type, output_path))
+    print('Built {} archive in {}'.format(archive_type, output_path))
 
 
 def main():
@@ -281,7 +302,6 @@ def main():
     parser_decode.set_defaults(func=_decode_cmd)
 
     parser_build = subparsers.add_parser('build', parents=[parent_parser])
-    parser_build.add_argument('-t', dest='type', help='set archive type', default='GEMSTONE')
     parser_build.set_defaults(func=_build_cmd)
 
     args = parser.parse_args()

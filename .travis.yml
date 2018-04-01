@@ -16,7 +16,18 @@ script:
       iv = $(head -c16 /dev/urandom | base64 -w0)
       signing_key = $(openssl genrsa 1024 | sed 's/^/    /')
       EOF
-  - echo '<LTD_CODEPLUG VERSION="10.05.06"/>' >test.xml
+  - |
+      cat <<EOF >test.xml
+      <LTD_CODEPLUG VERSION="10.05.06">
+        <CS_PARTITION>
+          <CS_INFO_TYPE_GRP>
+            <CS_INFO_TYPE Applicable="Enabled" ListID="0">
+              <CS_FWID Applicable="Enabled" ListID="0">0C78E1B906C54D3A8F264CE5C4F0B9DF</CS_FWID>
+            </CS_INFO_TYPE>
+          </CS_INFO_TYPE_GRP>
+        </CS_PARTITION>
+      </LTD_CODEPLUG>
+      EOF
   - python codeplug.py build test.xml
   - python codeplug.py decode test.xml.ctb
   - diff -u test.xml test.xml.ctb.xml
