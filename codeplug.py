@@ -18,6 +18,40 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 from OpenSSL.crypto import load_pkcs12
 
 
+_CP1252_BESTFIT = {
+    128: 8364,
+    130: 8218,
+    131: 402,
+    132: 8222,
+    133: 8230,
+    134: 8224,
+    135: 8225,
+    136: 710,
+    137: 8240,
+    138: 352,
+    139: 8249,
+    140: 338,
+    142: 381,
+    145: 8216,
+    146: 8217,
+    147: 8220,
+    148: 8221,
+    149: 8226,
+    150: 8211,
+    151: 8212,
+    152: 732,
+    153: 8482,
+    154: 353,
+    155: 8250,
+    156: 339,
+    158: 382,
+    159: 376,
+}
+
+
+_CP1252_BESTFIT_INVERSE = {c: u for u, c in _CP1252_BESTFIT.items()}
+
+
 def _int_to_bytes(number):
     return number.to_bytes((number.bit_length() + 7) // 8, byteorder='big')
 
@@ -35,12 +69,90 @@ def _key_to_xml(key, root):
     etree.SubElement(node, 'Exponent').text = base64.b64encode(_int_to_bytes(numbers.e))
 
 
+def _encode_xml_chars(data: bytes) -> bytes:
+    """Encode control characters"""
+    result = []
+    for c in data:
+        if c < 0x20 and c not in [0x09, 0x0a, 0x0d]:
+            result += '&#x{:X};'.format(c).encode()
+        else:
+            result.append(c)
+    return bytes(result)
+
+
+def _decode_xml_chars(data: bytes) -> bytes:
+    """Decode control characters"""
+    for c in range(0, 0x20):
+        if c in [0x09, 0x0a, 0x0d]:
+            continue
+        data = data.replace('&#x{:X};'.format(c).encode(), bytes([c]))
+    return data
+
+
+def _encode_ascii_binary(data: bytes) -> str:
+    """Map non-printable characters to a Unicode Private Use Area"""
+    result = []
+    for c in data:
+        if (c >= 0x20 and c < 0x7f) or c == 0x0a:
+            result.append(c)
+        else:
+            result += chr(0xe000 | c).encode('utf-8')
+    return bytes(result).decode()
+
+
+def _decode_ascii_binary(data: str) -> bytes:
+    """Map non-printable characters back from the Unicode Private Use Area"""
+    result = []
+    for c in data:
+        p = ord(c)
+        if p >= 0xe000 and p <= 0xe0ff:
+            result.append(p & 0xff)
+        else:
+            result.append(p)
+    return bytes(result)
+
+
+def _decode_xml_privateuse(data: bytes) -> bytes:
+    """Decode Unicode characters of the Unicode Private Use Area"""
+    result = []
+    for c in data:
+        p = ord(c)
+        if p >= 0xe000 and p <= 0xe0ff:
+            result.append(p & 0xff)
+        else:
+            result.append(p)
+    return bytes(result)
+
+
+def _encode_cp1252_bestfit(data: bytes) -> bytes:
+    """Map CP-1252 codepoints to Unicode"""
+    result = b''
+    for c in data:
+        result += chr(_CP1252_BESTFIT.get(c, c)).encode('utf-8')
+    return result
+
+
+def _decode_cp1252_bestfit(data: bytes) -> bytes:
+    """Interpret bytes as Unicode codepoints and map them back to CP-1252"""
+    result = []
+    for c in data:
+        p = ord(c)
+        result.append(_CP1252_BESTFIT_INVERSE.get(p, p))
+    return bytes(result)
+
+
 def decode(data, key, iv):
     backend = default_backend()
 
-    doc = etree.fromstring(data)
-    node = doc.xpath('/ARCHIVE/RADIO')[0]
-    encrypted = base64.b64decode(node.text)
+    doc = etree.fromstring(_encode_ascii_binary(_decode_xml_chars(data.strip())))
+    archive_type = doc.get('TYPE')
+    archive_content = doc.xpath('RADIO')[0].text
+    if archive_type == 'GEMSTONE':
+        encrypted = base64.b64decode(archive_content)
+    elif archive_type == 'MATRIX':
+        encrypted = _decode_cp1252_bestfit(_decode_ascii_binary(archive_content).decode())
+    else:
+        raise Exception('Unsupported archive type: {}'.format(archive_type))
 
     decryptor = Cipher(AES(key), CBC(iv), backend=backend).decryptor()
     compressed = decryptor.update(encrypted) + decryptor.finalize()
@@ -57,10 +169,10 @@ def decode(data, key, iv):
     key = _key_from_xml(signature, backend)
     key.verify(digest, payload.decode('utf-8').encode('utf-16-le'), PKCS1v15(), SHA1())
 
-    return payload
+    return archive_type, payload
 
 
-def build(payload, signing_key, key, iv, backend):
+def build(archive_type, payload, signing_key, key, iv, backend):
     backend = signing_key._backend
 
     signature = signing_key.sign(payload.decode('utf-8').encode('utf-16-le'), PKCS1v15(), SHA1())
@@ -82,13 +194,20 @@ def build(payload, signing_key, key, iv, backend):
     encrypted = encryptor.update(padded) + encryptor.finalize()
 
     doc = etree.Element('ARCHIVE')
-    doc.set('TYPE', 'GEMSTONE')
+    doc.set('TYPE', archive_type)
     node = etree.SubElement(doc, 'RADIO')
     node.set('VERSION', '1')
-    node.set('ENCODING', 'Base64')
-    node.text = base64.b64encode(encrypted)
+    if archive_type == 'GEMSTONE':
+        node.set('ENCODING', 'Base64')
+        node.text = base64.b64encode(encrypted)
+    elif archive_type == 'MATRIX':
+        node.text = _encode_ascii_binary(_encode_cp1252_bestfit(encrypted))
+    else:
+        raise Exception('Unsupported archive type: {}'.format(archive_type))
 
-    return etree.tostring(doc)
+    xml = etree.tostring(doc, encoding='utf-8')
+
+    return _encode_xml_chars(_decode_ascii_binary(xml.decode()))
 
 
 def _read_config(filename):
@@ -116,12 +235,15 @@ def _decode_cmd(args):
     with open(args.file, 'rb') as f:
         data = f.read()
 
-    result = decode(data, base64.b64decode(config['key']), base64.b64decode(config['iv']))
+    archive_type, result = decode(data, base64.b64decode(config['key']), base64.b64decode(config['iv']))
 
     xml = etree.fromstring(result)
 
-    with open(args.output or args.file + '.xml', 'wb') as f:
+    output_path = args.output or args.file + '.xml'
+    with open(output_path, 'wb') as f:
         f.write(etree.tostring(xml, pretty_print=True))
+
+    print('Decoded {} archive to {}'.format(archive_type, output_path))
 
 
 def _build_cmd(args):
@@ -129,23 +251,26 @@ def _build_cmd(args):
 
     backend = default_backend()
 
-    payload = etree.tostring(etree.parse(args.file))
+    payload = etree.tostring(etree.parse(args.file), encoding='utf-8')
 
     if 'signing_password' in config:
         signing_key = load_pkcs12(base64.b64decode(config['signing_key']), base64.b64decode(config['signing_password'])).get_privatekey().to_cryptography_key()
     else:
         signing_key = load_pem_private_key(config['signing_key'].encode('ascii'), password=None, backend=backend)
 
-    result = build(payload, signing_key, base64.b64decode(config['key']), base64.b64decode(config['iv']), backend)
+    result = build(args.type, payload, signing_key, base64.b64decode(config['key']), base64.b64decode(config['iv']), backend)
 
-    with open(args.output or args.file + '.ctb', 'wb') as f:
+    output_path = args.output or args.file + '.ctb'
+    with open(output_path, 'wb') as f:
         f.write(result)
+
+    print('Built {} archive in {}'.format(args.type, output_path))
 
 
 def main():
     parent_parser = argparse.ArgumentParser(add_help=False)
-    parent_parser.add_argument('-c', dest='config')
-    parent_parser.add_argument('-o', dest='output')
+    parent_parser.add_argument('-c', help='load configuration from the specified file', dest='config')
+    parent_parser.add_argument('-o', help='output result to the specified file', dest='output')
     parent_parser.add_argument('file')
 
     parser = argparse.ArgumentParser()
@@ -156,6 +281,7 @@ def main():
     parser_decode.set_defaults(func=_decode_cmd)
 
     parser_build = subparsers.add_parser('build', parents=[parent_parser])
+    parser_build.add_argument('-t', dest='type', help='set archive type', default='GEMSTONE')
     parser_build.set_defaults(func=_build_cmd)
 
     args = parser.parse_args()
